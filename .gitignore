@@ -1,0 +1,31 @@
+# Allowlist: ignore everything, then re-include only what the public repo needs
+# to build and run the plugin. Anything new stays local unless added below.
+/*
+
+# Plugin release files (main.js is a build output, attached to GitHub releases instead)
+!/manifest.json
+!/versions.json
+!/styles.css
+
+# Source and build setup
+!/src/
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+!/esbuild.config.mjs
+!/version-bump.mjs
+
+# Docs
+!/README.md
+!/LICENSE
+!/.gitignore
+
+# Never commit, even if re-included above by mistake
+.env
+.env.*
+LOCAL-NOTES.md
+data.json
+node_modules/
+main.js
+*.map
+.DS_Store

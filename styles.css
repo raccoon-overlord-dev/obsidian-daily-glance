@@ -1,0 +1,238 @@
+/* =====================================================================
+   HOME WIDGET — reference styles.css
+   Copy everything ABOVE the "PREVIEW SHIM" marker into the plugin's
+   styles.css. Only Obsidian variables and the --dg-* aliases below.
+   ===================================================================== */
+
+/* ---------- 1. Semantic alias layer (the ONLY place Obsidian vars are mapped) */
+.daily-glance {
+  --dg-ground: transparent;                         /* the leaf's own background shows through */
+  --dg-surface: var(--background-secondary);        /* tab: tiles lift off background-primary */
+  --dg-surface-hover: var(--background-modifier-hover);
+  --dg-line: var(--background-modifier-border);
+  --dg-text: var(--text-normal);
+  --dg-text-2: var(--text-muted);
+  --dg-text-3: var(--text-faint);
+  --dg-accent: var(--interactive-accent);
+  --dg-accent-text: var(--text-accent);
+  --dg-on-accent: var(--text-on-accent);
+  --dg-error: var(--text-error);
+  --dg-warning: var(--text-warning);
+  --dg-focus: var(--background-modifier-border-focus); /* plugin addition: focus ring for div day cells */
+
+  --dg-pad: var(--size-4-3);
+  --dg-gap: var(--size-4-2);
+  --dg-radius: var(--radius-m);
+
+  container: dg / inline-size;
+  font-family: var(--font-interface);
+  color: var(--dg-text);
+  padding: var(--dg-gap);
+}
+/* Docked in a sidebar the leaf is already background-secondary: flip. */
+.mod-left-split .daily-glance,
+.mod-right-split .daily-glance,
+.daily-glance.is-sidebar { --dg-surface: var(--background-primary); }
+
+/* ---------- 2. Grid — Hero layout: 2x2, uneven columns, tiles */
+.daily-glance-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: auto;
+  gap: var(--dg-gap);
+}
+@container dg (min-width: 480px) {
+  .daily-glance { --dg-pad: var(--size-4-4); }
+  /* 1-1 clock · 1-2 weather · 2-1 calendar · 2-2 timer (DOM order) */
+  .daily-glance-grid { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+  /* A lone last panel (3 or 1 enabled) spans the row: no holes. */
+  .daily-glance-panel:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+.daily-glance-panel {
+  background: var(--dg-surface);
+  border: 1px solid var(--dg-line);
+  border-radius: var(--dg-radius);
+}
+
+/* ---------- 3. Panel shell */
+.daily-glance-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--dg-pad);
+  gap: var(--size-4-2);
+}
+.daily-glance-panel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+  min-height: 24px;
+}
+.daily-glance-panel-title {
+  flex: 1;
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  color: var(--dg-text-2);
+}
+.daily-glance-panel-actions { display: flex; gap: 2px; }
+.daily-glance-panel-body { display: flex; flex-direction: column; gap: var(--size-4-2); min-width: 0; }
+
+.daily-glance-status {
+  display: flex; align-items: center; gap: var(--size-4-1);
+  font-size: var(--font-ui-smaller);
+  color: var(--dg-text-2);
+}
+.daily-glance-status.is-error { color: var(--dg-error); }
+.daily-glance-status.is-stale svg { color: var(--dg-warning); }
+.daily-glance-skeleton {
+  height: 12px; border-radius: var(--radius-s);
+  background: var(--dg-surface-hover);
+}
+.daily-glance-empty { display: flex; align-items: center; gap: var(--size-4-1); font-size: var(--font-ui-small); color: var(--dg-text-2); }
+.daily-glance-status svg, .daily-glance-empty svg, .daily-glance-timer-done-label svg { width: 16px; height: 16px; flex: none; }
+
+/* ---------- 4. Clock */
+.daily-glance-clock { display: flex; flex-direction: column; gap: var(--size-4-1); }
+.daily-glance-clock-time {
+  font-size: clamp(32px, 14cqi, 64px);
+  font-weight: 600; line-height: 1; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.daily-glance-clock-seconds, .daily-glance-clock-ampm {
+  font-size: 0.4em; font-weight: 500; color: var(--dg-text-2); margin-left: 0.15em; letter-spacing: 0;
+}
+.daily-glance-clock-date { font-size: var(--font-ui-small); color: var(--dg-text-2); }
+
+/* ---------- 5. Weather */
+.daily-glance-weather-now { display: flex; align-items: center; gap: var(--size-4-3); }
+.daily-glance-weather-icon { color: var(--dg-text-2); display: flex; }
+.daily-glance-weather-icon svg { width: 32px; height: 32px; }
+.daily-glance-weather-temp {
+  font-size: clamp(24px, 9cqi, 40px); font-weight: 500; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.daily-glance-weather-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.daily-glance-weather-cond { font-size: var(--font-ui-small); }
+.daily-glance-weather-range, .daily-glance-weather-place {
+  font-size: var(--font-ui-smaller); color: var(--dg-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.daily-glance-weather-forecast {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--size-4-1);
+  padding-top: var(--size-4-2); border-top: 1px solid var(--dg-line);
+}
+.daily-glance-weather-day {
+  display: flex; flex-direction: column; align-items: center; gap: var(--size-4-1);
+  font-size: var(--font-ui-smaller); color: var(--dg-text-2);
+}
+.daily-glance-weather-day svg { width: 16px; height: 16px; color: var(--dg-text-2); }
+.daily-glance-weather-day-hi { color: var(--dg-text); font-variant-numeric: tabular-nums; }
+.daily-glance-weather-day-lo { color: var(--dg-text-2); font-variant-numeric: tabular-nums; margin-top: -2px; }
+
+/* ---------- 6. Calendar */
+.daily-glance-cal { display: flex; flex-direction: column; gap: var(--size-4-3); }
+@container dg (min-width: 900px) {
+  .daily-glance-cal.has-events { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+}
+.daily-glance-cal-nav { display: flex; align-items: center; gap: 2px; }
+.daily-glance-cal-month-label { flex: 1; font-size: var(--font-ui-small); font-weight: var(--font-semibold); }
+.daily-glance-cal-grid {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  row-gap: 2px; text-align: center;
+}
+.daily-glance-cal-weekday { font-size: var(--font-ui-smaller); color: var(--dg-text-2); padding-bottom: var(--size-4-1); }
+.daily-glance-cal-day {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 34px; border-radius: var(--radius-s); cursor: pointer;
+  font-size: var(--font-ui-smaller); font-weight: 500; font-variant-numeric: tabular-nums;
+  color: var(--dg-text);
+}
+.daily-glance-cal-day:hover { background: var(--dg-surface-hover); }
+.daily-glance-cal-day > span:first-child {
+  width: 24px; height: 24px; line-height: 24px; border-radius: 9999px; margin-bottom: 4px;
+}
+.daily-glance-cal-day.is-outside { color: var(--dg-text-3); }
+.daily-glance-cal-day.is-today > span:first-child { box-shadow: inset 0 0 0 1.5px var(--dg-accent); color: var(--dg-accent-text); font-weight: 700; }
+.daily-glance-cal-day.is-selected > span:first-child { background: var(--dg-accent); color: var(--dg-on-accent); box-shadow: none; font-weight: 600; }
+.daily-glance-cal-dots { position: absolute; bottom: 1px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; }
+.daily-glance-cal-dot { width: 4px; height: 4px; border-radius: 9999px; background: var(--dg-accent); }
+.daily-glance-cal-day.is-outside .daily-glance-cal-dot { opacity: 0.5; }
+
+.daily-glance-cal-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.daily-glance-cal-week-day { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: var(--size-4-1); border-radius: var(--radius-s); }
+.daily-glance-cal-week-day.is-today { box-shadow: inset 0 0 0 1px var(--dg-accent); }
+
+.daily-glance-cal-events { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.daily-glance-cal-events-label { font-size: var(--font-ui-smaller); color: var(--dg-text-2); font-weight: var(--font-semibold); padding-bottom: 2px; }
+.daily-glance-cal-event {
+  display: grid; grid-template-columns: 84px minmax(0, 1fr); column-gap: var(--size-4-2);
+  padding: var(--size-4-1) var(--size-4-1); border-radius: var(--radius-s);
+}
+.daily-glance-cal-event:hover { background: var(--dg-surface-hover); }
+.daily-glance-cal-event-when { font-size: var(--font-ui-smaller); color: var(--dg-text-2); font-variant-numeric: tabular-nums; line-height: 18px; white-space: nowrap; }
+.daily-glance-cal-event-when b { display: block; font-weight: 600; color: var(--dg-text); }
+.daily-glance-cal-event-title { font-size: var(--font-ui-small); line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.daily-glance-cal-event-feed { font-size: var(--font-ui-smaller); color: var(--dg-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- 7. Timer */
+.daily-glance-timer { display: flex; flex-direction: column; gap: var(--size-4-3); }
+.daily-glance-timer-display {
+  font-size: clamp(28px, 11cqi, 52px); font-weight: 500; line-height: 1; letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.daily-glance-timer.is-paused .daily-glance-timer-display { color: var(--dg-text-2); }
+.daily-glance-timer-progress { height: 4px; border-radius: 9999px; background: var(--dg-line); overflow: hidden; }
+.daily-glance-timer-progress > div { height: 100%; background: var(--dg-accent); border-radius: inherit; }
+.daily-glance-timer-inputs { display: flex; align-items: flex-end; gap: var(--size-4-1); }
+.daily-glance-timer-field { display: flex; flex-direction: column; gap: 2px; font-size: var(--font-ui-smaller); color: var(--dg-text-2); }
+.daily-glance-timer-field input { width: 3.5em; text-align: center; font-variant-numeric: tabular-nums; }
+.daily-glance-timer-sep { padding-bottom: 6px; color: var(--dg-text-3); }
+.daily-glance-timer-controls { display: flex; gap: var(--size-4-2); flex-wrap: wrap; }
+.daily-glance-timer.is-done .daily-glance-timer-display { color: var(--dg-accent-text); }
+.daily-glance-timer-done-label {
+  display: flex; align-items: center; gap: var(--size-4-1);
+  font-size: var(--font-ui-small); font-weight: var(--font-semibold); color: var(--dg-accent-text);
+}
+.daily-glance-panel.is-done { box-shadow: inset 0 0 0 1.5px var(--dg-accent); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .daily-glance-timer-progress > div { transition: width 1s linear; }
+}
+
+/* ---------- Plugin additions (not in bundle.css) */
+/* setIcon needs a wrapper element; keep it from adding inline line-height around the svg. */
+.daily-glance-status > span, .daily-glance-empty > span,
+.daily-glance-timer-done-label > span, .daily-glance-timer-controls button > span { display: flex; }
+/* Icon + label buttons (the previews' shim did this; Obsidian's native button doesn't). */
+.daily-glance-timer-controls button { gap: var(--size-4-1); }
+.daily-glance-timer-controls svg { width: var(--icon-xs); height: var(--icon-xs); }
+.daily-glance-weather-day > span:nth-child(2) { display: flex; }
+/* Calendar: text "Today" button in the nav (the preview inlined this). */
+.daily-glance-cal-today { width: auto; padding: 0 var(--size-4-2); font-size: var(--font-ui-smaller); font-weight: 500; }
+/* Calendar: optional ISO week-number column. */
+.daily-glance-cal-grid.has-week-numbers { grid-template-columns: auto repeat(7, minmax(0, 1fr)); }
+.daily-glance-cal-weeknum {
+  align-self: center; justify-self: start; margin-right: var(--size-4-1); padding: 1px var(--size-2-2);
+  border-radius: var(--radius-s); background: var(--dg-surface-hover);
+  font-size: calc(var(--font-ui-smaller) * 0.85); font-weight: var(--font-semibold); line-height: 1.4;
+  color: var(--dg-text-2); font-variant-numeric: tabular-nums;
+}
+/* Calendar: week strip — day label and compact event titles; days are clickable. */
+.daily-glance-cal-week-day { cursor: pointer; }
+.daily-glance-cal-week-day:hover { background: var(--dg-surface-hover); }
+.daily-glance-cal-week-day.is-today .daily-glance-cal-weekday { color: var(--dg-accent-text); font-weight: 700; }
+.daily-glance-cal-week-day.is-selected { background: var(--dg-accent); }
+.daily-glance-cal-week-day.is-selected > * { color: var(--dg-on-accent); }
+.daily-glance-cal-week-day .daily-glance-cal-event-title { font-size: var(--font-ui-smaller); }
+/* Calendar: optional per-feed colours. --dg-event-color is the user's pick, set inline per element
+   (user data, not a theme colour); the highlight is a tint so the text stays --dg-text. */
+.daily-glance-cal-event-title.has-color {
+  width: fit-content; max-width: 100%; padding: 0 var(--size-2-2); border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--dg-event-color) 30%, transparent);
+}
+.daily-glance-cal-dot.has-color { background: var(--dg-event-color); }
+/* Loading skeleton bar sizes (were inline styles in the preview). */
+.daily-glance-skeleton:first-child { width: 60%; height: 28px; }
+.daily-glance-skeleton:nth-child(2) { width: 80%; }
+/* Day cells are focusable divs, not native buttons, so give them a visible focus ring. */
+.daily-glance-cal-day:focus-visible, .daily-glance-cal-week-day:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--dg-focus); }
