@@ -234,7 +234,7 @@ Always use `requestUrl`, never `fetch`. Put remote text into the DOM only as tex
 
 **5. Style it.** Add rules to the **Plugin additions** block in `styles.css`, using `daily-glance-<item>-*` class names and only `--dg-*` colours. The grid handles placement: items flow in `ITEMS` order, and an odd last item spans the full width.
 
-Add the item's settings to the settings type, the defaults and `DailyGlanceSettingTab.display()`. Call `plugin.saveSettings()` after every change so open views update live.
+Add the item's settings to the settings type, the defaults and `DailyGlanceSettingTab.getSettingDefinitions()`. Simple toggles and dropdowns are `control` definitions whose `key` is the settings field name; anything custom is a `render` definition. The same definitions are drawn by Obsidian 1.13+ and by the `display()` fallback on older versions. Call `plugin.saveSettings()` after every change so open views update live.
 
 ## License
 

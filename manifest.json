@@ -1,7 +1,7 @@
 {
   "id": "daily-glance",
   "name": "Daily Glance",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "minAppVersion": "1.7.2",
   "description": "Your day at a glance: clock, weather, calendar and timer in one view.",
   "author": "raccoon-overlord-dev",

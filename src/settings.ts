@@ -1,4 +1,11 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import {
+	App,
+	PluginSettingTab,
+	requireApiVersion,
+	Setting,
+	SettingDefinitionItem,
+	SettingDefinitionList,
+} from "obsidian";
 import type DailyGlancePlugin from "./main";
 import { DEFAULT_DATE_FORMAT } from "./clock";
 import { geocode, TempUnit, WeatherLocation } from "./weather";
@@ -47,47 +54,152 @@ export const DEFAULT_SETTINGS: DailyGlanceSettings = {
 	colorEvents: false,
 };
 
+// Settings are declared once, in getSettingDefinitions(). Obsidian ≥ 1.13 renders them itself
+// (and indexes them for settings search); on older versions display() renders the same list.
 export class DailyGlanceSettingTab extends PluginSettingTab {
 	constructor(app: App, private plugin: DailyGlancePlugin) {
 		super(app, plugin);
 	}
 
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		const { feeds } = this.plugin.settings;
+		const weekdays: Record<string, string> = {};
+		for (let i = 0; i < 7; i++) weekdays[String(i)] = moment.weekdays(i);
+
+		return [
+			{
+				type: "group",
+				heading: "Items",
+				items: ITEMS.map((item) => ({
+					name: `Show ${item.title.toLowerCase()}`,
+					control: { type: "toggle", key: `show.${item.id}` },
+				})),
+			},
+			{
+				type: "group",
+				heading: "Clock",
+				items: [
+					{
+						name: "Time format",
+						control: { type: "dropdown", key: "timeFormat", options: { "24h": "24-hour", "12h": "12-hour" } },
+					},
+					{ name: "Show seconds", control: { type: "toggle", key: "showSeconds" } },
+					{ name: "Date format", desc: "Moment format string.", render: (setting) => this.renderDateFormat(setting) },
+				],
+			},
+			{
+				type: "group",
+				heading: "Weather",
+				items: [
+					{ name: "City", desc: "Weather data from Open-Meteo.", render: (setting) => this.renderCity(setting) },
+					{ name: "Temperature unit", control: { type: "dropdown", key: "tempUnit", options: { C: "°C", F: "°F" } } },
+					{ name: "5-day forecast", control: { type: "toggle", key: "showForecast" } },
+				],
+			},
+			{
+				type: "group",
+				heading: "Calendar",
+				items: [
+					{ name: "Layout", control: { type: "dropdown", key: "calendarLayout", options: CAL_LAYOUTS } },
+					{ name: "Week starts on", control: { type: "dropdown", key: "weekStart", options: weekdays } },
+					{ name: "Show week numbers", desc: "ISO week numbers.", control: { type: "toggle", key: "showWeekNumbers" } },
+					{
+						name: "Colour events by calendar",
+						desc: "Pick a colour for each feed below; its event titles get highlighted with it.",
+						control: { type: "toggle", key: "colorEvents" },
+					},
+				],
+			},
+			{
+				type: "list",
+				heading: "Calendar feeds",
+				emptyState:
+					"No feeds yet. Add a read-only .ics URL (e.g. Google Calendar's secret address). URLs are stored in this vault's plugin data.",
+				items: feeds.map((feed, i) => ({
+					name: feedName(feed, i),
+					aliases: ["calendar", "ics"],
+					render: (setting) => this.renderFeed(setting, i),
+				})),
+				onDelete: (i) => void this.removeFeed(i),
+				// Omitted at the limit, which hides the add button.
+				addItem: feeds.length < MAX_FEEDS ? { name: "Add feed", action: () => void this.addFeed() } : undefined,
+			},
+		];
+	}
+
+	// Control keys are settings field names; "show.<item>" addresses the nested toggles.
+	getControlValue(key: string): unknown {
+		const s = this.plugin.settings;
+		if (key.startsWith("show.")) return s.show[key.slice(5) as ItemId];
+		if (key === "weekStart") return String(s.weekStart); // dropdown values are strings
+		return (s as unknown as Record<string, unknown>)[key];
+	}
+
+	async setControlValue(key: string, value: unknown): Promise<void> {
+		const s = this.plugin.settings;
+		if (key.startsWith("show.")) s.show[key.slice(5) as ItemId] = value === true;
+		else if (key === "weekStart") s.weekStart = Number(value);
+		else (s as unknown as Record<string, unknown>)[key] = value;
+		if (key === "tempUnit") this.plugin.weather.clear(); // refetch in the new unit
+		await this.plugin.saveSettings();
+		if (key === "colorEvents") this.rerender(); // show/hide the per-feed colour pickers
+	}
+
+	// Fallback for Obsidian < 1.13 (1.13+ never calls it while definitions exist).
 	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
+		this.containerEl.empty();
+		for (const def of this.getSettingDefinitions()) this.renderFallback(this.containerEl, def);
+	}
 
-		new Setting(containerEl).setName("Items").setHeading();
-		for (const item of ITEMS) {
-			new Setting(containerEl)
-				.setName(`Show ${item.title.toLowerCase()}`)
-				.addToggle((t) =>
-					t.setValue(this.plugin.settings.show[item.id]).onChange(async (v) => {
-						this.plugin.settings.show[item.id] = v;
-						await this.plugin.saveSettings();
-					})
-				);
+	private rerender(): void {
+		if (requireApiVersion("1.13.0")) this.update();
+		else this.display();
+	}
+
+	private renderFallback(el: HTMLElement, def: SettingDefinitionItem): Setting | undefined {
+		if ("type" in def) {
+			if (def.type === "page") return; // not used
+			if (def.heading) new Setting(el).setName(def.heading).setHeading();
+			const list = def.type === "list" ? (def as SettingDefinitionList) : null;
+			def.items?.forEach((item, i) => {
+				const row = this.renderFallback(el, item);
+				if (row && list?.onDelete) {
+					const onDelete = list.onDelete;
+					row.addExtraButton((b) => b.setIcon("trash-2").setTooltip("Remove").onClick(() => onDelete(i)));
+				}
+			});
+			if (!def.items?.length && typeof list?.emptyState === "string") new Setting(el).setDesc(list.emptyState);
+			const addItem = list?.addItem;
+			if (addItem) new Setting(el).addButton((b) => b.setButtonText(addItem.name).onClick(() => addItem.action(b.buttonEl)));
+			return;
 		}
+		const setting = new Setting(el).setName(def.name);
+		if (def.desc) setting.setDesc(def.desc);
+		if (def.render) {
+			// Our render callbacks only use the Setting; SettingGroup doesn't exist before 1.11.
+			(def.render as (s: Setting) => void)(setting);
+		} else if (def.control?.type === "toggle") {
+			const { key } = def.control;
+			setting.addToggle((t) =>
+				t.setValue(this.getControlValue(key) === true).onChange((v) => void this.setControlValue(key, v))
+			);
+		} else if (def.control?.type === "dropdown") {
+			const { key, options } = def.control;
+			setting.addDropdown((d) =>
+				d
+					.addOptions(options)
+					.setValue(String(this.getControlValue(key)))
+					.onChange((v) => void this.setControlValue(key, v))
+			);
+		}
+		return setting;
+	}
 
-		new Setting(containerEl).setName("Clock").setHeading();
-		new Setting(containerEl).setName("Time format").addDropdown((d) =>
-			d
-				.addOptions({ "24h": "24-hour", "12h": "12-hour" })
-				.setValue(this.plugin.settings.timeFormat)
-				.onChange(async (v) => {
-					this.plugin.settings.timeFormat = v as DailyGlanceSettings["timeFormat"];
-					await this.plugin.saveSettings();
-				})
-		);
-		new Setting(containerEl).setName("Show seconds").addToggle((t) =>
-			t.setValue(this.plugin.settings.showSeconds).onChange(async (v) => {
-				this.plugin.settings.showSeconds = v;
-				await this.plugin.saveSettings();
-			})
-		);
-		const dateFormat = new Setting(containerEl).setName("Date format");
-		const sample = dateFormat.descEl.createSpan();
-		dateFormat.descEl.prepend("Moment format string. Preview: ");
-		dateFormat.addMomentFormat((m) =>
+	private renderDateFormat(setting: Setting): void {
+		const sample = createSpan();
+		setting.descEl.empty();
+		setting.descEl.append("Moment format string. Preview: ", sample);
+		setting.addMomentFormat((m) =>
 			m
 				.setDefaultFormat(DEFAULT_DATE_FORMAT)
 				.setValue(this.plugin.settings.dateFormat)
@@ -97,21 +209,22 @@ export class DailyGlanceSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				})
 		);
+	}
 
-		new Setting(containerEl).setName("Weather").setHeading();
-		const city = new Setting(containerEl).setName("City");
-		const status = city.descEl.createSpan();
+	private renderCity(setting: Setting): void {
+		setting.descEl.empty();
+		const status = setting.descEl.createSpan();
 		const showStatus = (text: string, error = false) => {
 			status.setText(text);
 			status.toggleClass("mod-warning", error);
 		};
-		const loc = this.plugin.settings.location;
-		if (loc) showStatus(`Found: ${loc.label}`);
-		else if (this.plugin.settings.city) showStatus(`Couldn't find “${this.plugin.settings.city}”.`, true);
+		const { location, city } = this.plugin.settings;
+		if (location) showStatus(`Found: ${location.label}`);
+		else if (city) showStatus(`Couldn't find “${city}”.`, true);
 		else showStatus("Weather data from Open-Meteo.");
-		city.addText((t) => {
-			t.setPlaceholder("e.g. Roma").setValue(this.plugin.settings.city);
-			// "change" fires on blur/Enter, so we geocode once per edit, not per keystroke.
+
+		setting.addText((t) => {
+			t.setPlaceholder("e.g. Roma").setValue(city);
 			const onChange = async () => {
 				const value = t.getValue().trim();
 				const { settings } = this.plugin;
@@ -127,133 +240,70 @@ export class DailyGlanceSettingTab extends PluginSettingTab {
 						if (settings.location) showStatus(`Found: ${settings.location.label}`);
 						else showStatus(`Couldn't find “${value}”.`, true);
 					} catch (e) {
-						showStatus(`Lookup failed (${e instanceof Error ? e.message : e}). Edit the city to retry.`, true);
+						showStatus(`Lookup failed (${e instanceof Error ? e.message : String(e)}). Edit the city to retry.`, true);
 					}
 				} else showStatus("Weather data from Open-Meteo.");
 				await this.plugin.saveSettings();
 			};
+			// "change" fires on blur/Enter, so we geocode once per edit, not per keystroke.
 			t.inputEl.addEventListener("change", () => void onChange());
 		});
-		new Setting(containerEl).setName("Temperature unit").addDropdown((d) =>
-			d
-				.addOptions({ C: "°C", F: "°F" })
-				.setValue(this.plugin.settings.tempUnit)
-				.onChange(async (v) => {
-					this.plugin.settings.tempUnit = v as TempUnit;
-					this.plugin.weather.clear(); // refetch in the new unit
-					await this.plugin.saveSettings();
-				})
-		);
-		new Setting(containerEl).setName("5-day forecast").addToggle((t) =>
-			t.setValue(this.plugin.settings.showForecast).onChange(async (v) => {
-				this.plugin.settings.showForecast = v;
+	}
+
+	private renderFeed(setting: Setting, i: number): void {
+		const feed = this.plugin.settings.feeds[i];
+		if (!feed) return;
+		// Save on "change" (blur/Enter), so a feed is fetched once per edit, not per keystroke.
+		setting
+			.addText((t) => {
+				t.setPlaceholder("Name (optional)").setValue(feed.name);
+				t.inputEl.addEventListener("change", () => {
+					feed.name = t.getValue();
+					void this.plugin.saveSettings().then(() => this.rerender()); // row title shows the name
+				});
+			})
+			.addText((t) => {
+				t.setPlaceholder("https://…/basic.ics").setValue(feed.url);
+				t.inputEl.addEventListener("change", () => {
+					feed.url = t.getValue().trim();
+					void this.saveFeeds();
+				});
+			});
+		if (!this.plugin.settings.colorEvents) return;
+		// No colour until one is picked; the picker just starts from black.
+		setting.addColorPicker((c) =>
+			c.setValue(feed.color ?? "#000000").onChange(async (v) => {
+				feed.color = v;
 				await this.plugin.saveSettings();
 			})
 		);
-
-		new Setting(containerEl)
-			.setName("Calendar")
-			.setDesc("Read-only .ics feeds (e.g. Google Calendar's secret address). The URLs are stored in this vault's plugin data.")
-			.setHeading();
-		new Setting(containerEl).setName("Layout").addDropdown((d) =>
-			d
-				.addOptions(CAL_LAYOUTS)
-				.setValue(this.plugin.settings.calendarLayout)
-				.onChange(async (v) => {
-					this.plugin.settings.calendarLayout = v as CalLayout;
-					await this.plugin.saveSettings();
-				})
-		);
-		new Setting(containerEl).setName("Week starts on").addDropdown((d) => {
-			// Listed from Monday; values are moment's day numbers (0 = Sunday).
-			for (const i of [1, 2, 3, 4, 5, 6, 0]) d.addOption(String(i), moment.weekdays(i));
-			d.setValue(String(this.plugin.settings.weekStart)).onChange(async (v) => {
-				this.plugin.settings.weekStart = Number(v);
-				await this.plugin.saveSettings();
-			});
-		});
-		new Setting(containerEl)
-			.setName("Show week numbers")
-			.setDesc("ISO week numbers.")
-			.addToggle((t) =>
-				t.setValue(this.plugin.settings.showWeekNumbers).onChange(async (v) => {
-					this.plugin.settings.showWeekNumbers = v;
-					await this.plugin.saveSettings();
-				})
-			);
-		new Setting(containerEl)
-			.setName("Colour events by calendar")
-			.setDesc("Pick a colour for each feed below; its event titles get highlighted with it.")
-			.addToggle((t) =>
-				t.setValue(this.plugin.settings.colorEvents).onChange(async (v) => {
-					this.plugin.settings.colorEvents = v;
-					await this.plugin.saveSettings();
-					this.display();
-				})
-			);
-		const { feeds, colorEvents } = this.plugin.settings;
-		// Save on "change" (blur/Enter), so a feed is fetched once per edit, not per keystroke.
-		const saveFeeds = async () => {
-			await this.plugin.saveSettings();
-			await this.plugin.calendar.refresh(true);
-		};
-		feeds.forEach((feed, i) => {
-			const row = new Setting(containerEl)
-				.setName(feedName(feed, i))
-				.addText((t) => {
-					t.setPlaceholder("Name (optional)").setValue(feed.name);
-					t.inputEl.addEventListener("change", () => {
-						feed.name = t.getValue();
-						void this.plugin.saveSettings().then(() => this.display());
-					});
-				})
-				.addText((t) => {
-					t.setPlaceholder("https://…/basic.ics").setValue(feed.url);
-					t.inputEl.addEventListener("change", () => {
-						feed.url = t.getValue().trim();
-						void saveFeeds();
-					});
-				});
-			if (colorEvents) {
-				// No colour until one is picked; the picker just starts from black.
-				row.addColorPicker((c) =>
-					c.setValue(feed.color ?? "#000000").onChange(async (v) => {
-						feed.color = v;
-						await this.plugin.saveSettings();
-					})
-				);
-				row.addExtraButton((b) =>
-					b
-						.setIcon("rotate-ccw")
-						.setTooltip("Remove colour")
-						.onClick(async () => {
-							delete feed.color;
-							await this.plugin.saveSettings();
-							this.display();
-						})
-				);
-			}
-			row.addExtraButton((b) =>
-				b
-					.setIcon("trash-2")
-					.setTooltip("Remove feed")
-					.onClick(async () => {
-						feeds.splice(i, 1);
-						await saveFeeds();
-						this.display();
-					})
-			);
-		});
-		new Setting(containerEl).addButton((b) =>
+		setting.addExtraButton((b) =>
 			b
-				.setButtonText("Add feed")
-				.setDisabled(feeds.length >= MAX_FEEDS)
-				.onClick(async () => {
-					if (feeds.length >= MAX_FEEDS) return;
-					feeds.push({ name: "", url: "" });
-					await this.plugin.saveSettings();
-					this.display();
+				.setIcon("rotate-ccw")
+				.setTooltip("Remove colour")
+				.onClick(() => {
+					delete feed.color;
+					void this.plugin.saveSettings().then(() => this.rerender());
 				})
 		);
+	}
+
+	private async saveFeeds(): Promise<void> {
+		await this.plugin.saveSettings();
+		await this.plugin.calendar.refresh(true);
+	}
+
+	private async addFeed(): Promise<void> {
+		const { feeds } = this.plugin.settings;
+		if (feeds.length >= MAX_FEEDS) return;
+		feeds.push({ name: "", url: "" });
+		await this.plugin.saveSettings();
+		this.rerender();
+	}
+
+	private async removeFeed(i: number): Promise<void> {
+		this.plugin.settings.feeds.splice(i, 1);
+		await this.saveFeeds();
+		this.rerender();
 	}
 }
