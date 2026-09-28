@@ -112,7 +112,7 @@ export class DailyGlanceSettingTab extends PluginSettingTab {
 		city.addText((t) => {
 			t.setPlaceholder("e.g. Roma").setValue(this.plugin.settings.city);
 			// "change" fires on blur/Enter, so we geocode once per edit, not per keystroke.
-			t.inputEl.addEventListener("change", async () => {
+			const onChange = async () => {
 				const value = t.getValue().trim();
 				const { settings } = this.plugin;
 				if (value === settings.city && settings.location) return;
@@ -131,7 +131,8 @@ export class DailyGlanceSettingTab extends PluginSettingTab {
 					}
 				} else showStatus("Weather data from Open-Meteo.");
 				await this.plugin.saveSettings();
-			});
+			};
+			t.inputEl.addEventListener("change", () => void onChange());
 		});
 		new Setting(containerEl).setName("Temperature unit").addDropdown((d) =>
 			d
@@ -201,17 +202,16 @@ export class DailyGlanceSettingTab extends PluginSettingTab {
 				.setName(feedName(feed, i))
 				.addText((t) => {
 					t.setPlaceholder("Name (optional)").setValue(feed.name);
-					t.inputEl.addEventListener("change", async () => {
+					t.inputEl.addEventListener("change", () => {
 						feed.name = t.getValue();
-						await this.plugin.saveSettings();
-						this.display();
+						void this.plugin.saveSettings().then(() => this.display());
 					});
 				})
 				.addText((t) => {
 					t.setPlaceholder("https://…/basic.ics").setValue(feed.url);
-					t.inputEl.addEventListener("change", async () => {
+					t.inputEl.addEventListener("change", () => {
 						feed.url = t.getValue().trim();
-						await saveFeeds();
+						void saveFeeds();
 					});
 				});
 			if (colorEvents) {

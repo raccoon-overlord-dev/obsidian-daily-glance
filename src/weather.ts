@@ -61,12 +61,21 @@ const wmo = (code: number) => WMO[code] ?? ["cloud", "Unknown"];
 const REFRESH_MS = 30 * 60_000;
 const RETRY_MS = 5 * 60_000;
 
+// Response shapes: remote data, so every field is optional and checked before use.
+interface GeocodeResponse {
+	results?: { name?: string; admin1?: string; country?: string; latitude?: number; longitude?: number }[];
+}
+interface ForecastResponse {
+	current?: { temperature_2m?: number; weather_code?: number };
+	daily?: { time?: string[]; weather_code?: number[]; temperature_2m_max?: number[]; temperature_2m_min?: number[] };
+}
+
 // Throws on network error; returns null when the city isn't found.
 export async function geocode(city: string): Promise<WeatherLocation | null> {
 	const res = await requestUrl({
 		url: `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`,
 	});
-	const r = res.json?.results?.[0];
+	const r = (res.json as GeocodeResponse | null)?.results?.[0];
 	if (!r || typeof r.latitude !== "number" || typeof r.longitude !== "number") return null;
 	const name = String(r.name ?? city);
 	return {
@@ -84,19 +93,16 @@ async function fetchWeather(loc: WeatherLocation, unit: TempUnit): Promise<Weath
 			`&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min` +
 			`&timezone=auto&forecast_days=6&temperature_unit=${unit === "F" ? "fahrenheit" : "celsius"}`,
 	});
-	const { current, daily } = res.json ?? {};
-	if (typeof current?.temperature_2m !== "number" || !Array.isArray(daily?.time)) {
+	const { current, daily } = (res.json as ForecastResponse | null) ?? {};
+	const temp = current?.temperature_2m;
+	const { time, weather_code: codes, temperature_2m_max: max, temperature_2m_min: min } = daily ?? {};
+	if (typeof temp !== "number" || !Array.isArray(time) || !codes || !max || !min) {
 		throw new Error("unexpected response");
 	}
 	return {
-		temp: current.temperature_2m,
-		code: current.weather_code,
-		days: daily.time.map((date: string, i: number) => ({
-			date,
-			code: daily.weather_code[i],
-			max: daily.temperature_2m_max[i],
-			min: daily.temperature_2m_min[i],
-		})),
+		temp,
+		code: current?.weather_code ?? -1, // -1: unknown, renders as "Unknown"
+		days: time.map((date, i) => ({ date, code: codes[i], max: max[i], min: min[i] })),
 	};
 }
 
@@ -163,7 +169,7 @@ export function renderWeather(panel: Panel, plugin: DailyGlancePlugin): void {
 	const refresh = panel.actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Refresh" } });
 	setIcon(refresh, "refresh-cw");
 	setTooltip(refresh, "Refresh");
-	refresh.addEventListener("click", () => weather.refresh(true));
+	refresh.addEventListener("click", () => void weather.refresh(true));
 
 	const data = weather.data;
 	if (!data) {

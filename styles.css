@@ -165,7 +165,7 @@
 .daily-glance-cal-events { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .daily-glance-cal-events-label { font-size: var(--font-ui-smaller); color: var(--dg-text-2); font-weight: var(--font-semibold); padding-bottom: 2px; }
 .daily-glance-cal-event {
-  display: grid; grid-template-columns: 84px minmax(0, 1fr); column-gap: var(--size-4-2);
+  display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 0 var(--size-4-2);
   padding: var(--size-4-1) var(--size-4-1); border-radius: var(--radius-s);
 }
 .daily-glance-cal-event:hover { background: var(--dg-surface-hover); }

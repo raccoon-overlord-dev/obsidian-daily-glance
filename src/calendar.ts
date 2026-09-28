@@ -40,7 +40,7 @@ function toDate(t: ICAL.Time): Date {
 }
 
 function parse(text: string): ICAL.Event[] {
-	const cal = new ICAL.Component(ICAL.parse(text));
+	const cal = new ICAL.Component(ICAL.parse(text) as unknown[]);
 	for (const tz of cal.getAllSubcomponents("vtimezone")) ICAL.TimezoneService.register(tz);
 
 	// Group by UID: the master carries the RRULE, RECURRENCE-ID components override single occurrences.
@@ -265,7 +265,7 @@ export function renderCalendar(panel: Panel, plugin: DailyGlancePlugin): void {
 		renderEmpty(panel.body, "calendar", "Add a calendar feed in Settings → Daily Glance.");
 		return;
 	}
-	iconButton(panel.actions, "refresh-cw", "Refresh calendars", () => calendar.refresh(true));
+	iconButton(panel.actions, "refresh-cw", "Refresh calendars", () => void calendar.refresh(true));
 	if (calendar.pending()) {
 		setLoading(panel, true);
 		return;

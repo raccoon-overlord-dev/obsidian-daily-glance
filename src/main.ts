@@ -48,7 +48,7 @@ export default class DailyGlancePlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		const data = await this.loadData();
+		const data = (await this.loadData()) as Partial<DailyGlanceSettings> | null;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
 		this.settings.show = Object.assign({}, DEFAULT_SETTINGS.show, data?.show);
 		this.settings.feeds = (data?.feeds ?? []).slice();
@@ -63,8 +63,8 @@ export default class DailyGlancePlugin extends Plugin {
 
 	// Fetches whatever is due; each source rate-limits itself.
 	refreshData(): void {
-		this.weather.refresh();
-		this.calendar.refresh();
+		void this.weather.refresh();
+		void this.calendar.refresh();
 	}
 
 	redraw(id: ItemId): void {
