@@ -1,6 +1,7 @@
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import type DailyGlancePlugin from "./main";
-import { ItemId, ITEMS } from "./settings";
+import type { ItemId } from "./settings";
+import { t } from "./i18n";
 import { createPanel, Panel } from "./panel";
 import { renderClock } from "./clock";
 import { renderTimer } from "./timer";
@@ -44,10 +45,11 @@ export class DailyGlanceView extends ItemView {
 		this.panels = {};
 		this.ticks = {};
 		const grid = root.createDiv({ cls: "daily-glance" }).createDiv({ cls: "daily-glance-grid" });
-		for (const item of ITEMS) {
-			if (!this.plugin.settings.show[item.id]) continue;
-			this.panels[item.id] = createPanel(grid, item.id, item.title);
-			this.redraw(item.id);
+		const { settings } = this.plugin;
+		for (const id of settings.order) {
+			if (!settings.show[id]) continue;
+			this.panels[id] = createPanel(grid, id, t(id), settings.showTitles);
+			this.redraw(id);
 		}
 	}
 
@@ -57,7 +59,7 @@ export class DailyGlanceView extends ItemView {
 		if (!panel) return;
 		const { settings } = this.plugin;
 		if (id === "clock") this.ticks.clock = renderClock(panel.body, settings);
-		if (id === "timer") this.ticks.timer = renderTimer(panel, this.plugin.timer);
+		if (id === "timer") this.ticks.timer = renderTimer(panel, this.plugin.timer, settings);
 		if (id === "weather") renderWeather(panel, this.plugin);
 		if (id === "calendar") renderCalendar(panel, this.plugin);
 	}

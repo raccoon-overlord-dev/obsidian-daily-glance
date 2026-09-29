@@ -1,7 +1,8 @@
 import { Notice, Plugin } from "obsidian";
-import { DEFAULT_SETTINGS, DailyGlanceSettings, DailyGlanceSettingTab, ItemId } from "./settings";
+import { DEFAULT_SETTINGS, DailyGlanceSettings, DailyGlanceSettingTab, ItemId, ITEMS } from "./settings";
 import { DailyGlanceView, VIEW_TYPE } from "./view";
-import { Timer } from "./timer";
+import { beep, Timer } from "./timer";
+import { setLanguage, t } from "./i18n";
 import { Weather } from "./weather";
 import { Calendar } from "./calendar";
 
@@ -26,7 +27,9 @@ export default class DailyGlancePlugin extends Plugin {
 		// Plugin-level so the notice fires even when no view is open.
 		this.registerInterval(
 			window.setInterval(() => {
-				if (this.timer.check()) new Notice("Time's up");
+				if (!this.timer.check()) return;
+				new Notice(t("timesUp"));
+				if (this.settings.timerSound) beep();
 			}, 1000)
 		);
 		// Refresh due data only while a widget is open.
@@ -52,6 +55,11 @@ export default class DailyGlancePlugin extends Plugin {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
 		this.settings.show = Object.assign({}, DEFAULT_SETTINGS.show, data?.show);
 		this.settings.feeds = (data?.feeds ?? []).slice();
+		// Saved order first (known ids only), then any item it's missing.
+		const ids = ITEMS.map((i) => i.id);
+		const saved = Array.isArray(data?.order) ? data.order.filter((id) => ids.includes(id)) : [];
+		this.settings.order = [...new Set([...saved, ...ids])];
+		setLanguage(this.settings.language);
 	}
 
 	// Settings apply live to every open widget view.

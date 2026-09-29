@@ -1,4 +1,4 @@
-import { moment } from "./moment";
+import { m } from "./i18n";
 import type { DailyGlanceSettings } from "./settings";
 
 // Returns a tick function; the view calls it every second.
@@ -14,7 +14,7 @@ export function renderClock(body: HTMLElement, settings: DailyGlanceSettings): (
 
 	// Called every second; without seconds the text only changes once a minute.
 	const tick = () => {
-		const now = moment();
+		const now = m();
 		main.setText(now.format(is12h ? "h:mm" : "HH:mm"));
 		seconds?.setText(now.format("ss"));
 		ampm?.setText(now.format("A"));

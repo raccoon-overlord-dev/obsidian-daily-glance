@@ -8,13 +8,15 @@ import {
 } from "obsidian";
 import type DailyGlancePlugin from "./main";
 import { DEFAULT_DATE_FORMAT } from "./clock";
+import { presetLabel } from "./timer";
 import { geocode, TempUnit, WeatherLocation } from "./weather";
 import { CAL_LAYOUTS, CalLayout, Feed, feedName, MAX_FEEDS } from "./calendar";
 import { moment } from "./moment";
+import { Language, LANGUAGES, setLanguage } from "./i18n";
 
 export type ItemId = "clock" | "weather" | "calendar" | "timer";
 
-// Fixed render order (design system: Clock → Weather → Calendar → Timer).
+// Default render order; the user can reorder (settings.order).
 export const ITEMS: { id: ItemId; title: string }[] = [
 	{ id: "clock", title: "Clock" },
 	{ id: "weather", title: "Weather" },
@@ -24,6 +26,9 @@ export const ITEMS: { id: ItemId; title: string }[] = [
 
 export interface DailyGlanceSettings {
 	show: Record<ItemId, boolean>;
+	order: ItemId[];
+	showTitles: boolean;
+	language: Language;
 	timeFormat: "24h" | "12h";
 	showSeconds: boolean;
 	dateFormat: string;
@@ -36,10 +41,19 @@ export interface DailyGlanceSettings {
 	weekStart: number; // 0 = Sunday … 6 = Saturday
 	showWeekNumbers: boolean;
 	colorEvents: boolean;
+	upcomingCount: number;
+	upcomingDays: number;
+	timerSound: boolean;
+	timerPresets: boolean;
+	preset1: number; // minutes
+	preset2: number;
 }
 
 export const DEFAULT_SETTINGS: DailyGlanceSettings = {
 	show: { clock: true, weather: true, calendar: true, timer: true },
+	order: ITEMS.map((i) => i.id),
+	showTitles: true,
+	language: "auto",
 	timeFormat: "24h",
 	showSeconds: true,
 	dateFormat: DEFAULT_DATE_FORMAT,
@@ -52,7 +66,19 @@ export const DEFAULT_SETTINGS: DailyGlanceSettings = {
 	weekStart: 1,
 	showWeekNumbers: false,
 	colorEvents: false,
+	upcomingCount: 5,
+	upcomingDays: 14,
+	timerSound: true,
+	timerPresets: true,
+	preset1: 15,
+	preset2: 30,
 };
+
+// Dropdown values are strings; these settings are stored as numbers.
+const NUMERIC_KEYS = ["weekStart", "upcomingCount", "upcomingDays", "preset1", "preset2"];
+const PRESET_MINUTES = [1, 5, 10, 15, 20, 25, 30, 45, 60, 90, 120];
+const options = (values: number[], label: (n: number) => string) =>
+	Object.fromEntries(values.map((n) => [String(n), label(n)]));
 
 // Settings are declared once, in getSettingDefinitions(). Obsidian ≥ 1.13 renders them itself
 // (and indexes them for settings search); on older versions display() renders the same list.
@@ -62,18 +88,33 @@ export class DailyGlanceSettingTab extends PluginSettingTab {
 	}
 
 	getSettingDefinitions(): SettingDefinitionItem[] {
-		const { feeds } = this.plugin.settings;
+		const { feeds, order } = this.plugin.settings;
+		const title = (id: ItemId) => ITEMS.find((i) => i.id === id)?.title ?? id;
 		const weekdays: Record<string, string> = {};
 		for (let i = 0; i < 7; i++) weekdays[String(i)] = moment.weekdays(i);
 
 		return [
 			{
 				type: "group",
+				heading: "General",
+				items: [
+					{
+						name: "Language",
+						desc: "Language of the widget: labels, dates, weekdays and weather conditions.",
+						control: { type: "dropdown", key: "language", options: LANGUAGES },
+					},
+					{ name: "Show panel titles", control: { type: "toggle", key: "showTitles" } },
+				],
+			},
+			{
+				type: "list",
 				heading: "Items",
-				items: ITEMS.map((item) => ({
-					name: `Show ${item.title.toLowerCase()}`,
-					control: { type: "toggle", key: `show.${item.id}` },
+				items: order.map((id) => ({
+					name: title(id),
+					desc: `Show the ${title(id).toLowerCase()} panel.`,
+					control: { type: "toggle", key: `show.${id}` },
 				})),
+				onReorder: (from, to) => void this.moveItem(from, to),
 			},
 			{
 				type: "group",
@@ -104,17 +145,49 @@ export class DailyGlanceSettingTab extends PluginSettingTab {
 					{ name: "Week starts on", control: { type: "dropdown", key: "weekStart", options: weekdays } },
 					{ name: "Show week numbers", desc: "ISO week numbers.", control: { type: "toggle", key: "showWeekNumbers" } },
 					{
+						name: "Upcoming events",
+						desc: "How many events the list shows, and how far ahead it looks.",
+						control: { type: "dropdown", key: "upcomingCount", options: options([3, 5, 10, 15, 20], String) },
+					},
+					{
+						name: "Upcoming range",
+						control: {
+							type: "dropdown",
+							key: "upcomingDays",
+							options: options([1, 3, 7, 14, 30, 60], (n) => (n === 1 ? "1 day" : `${n} days`)),
+						},
+					},
+					{
 						name: "Colour events by calendar",
 						desc: "Pick a colour for each feed below; its event titles get highlighted with it.",
 						control: { type: "toggle", key: "colorEvents" },
+					},
+					{
+						name: "Feed privacy",
+						desc: "Add read-only .ics URLs (e.g. Google Calendar's secret address). They are stored in this vault's plugin data (data.json): don't share or sync that file publicly.",
+					},
+				],
+			},
+			{
+				type: "group",
+				heading: "Timer",
+				items: [
+					{ name: "Sound", desc: "Beep when the timer ends.", control: { type: "toggle", key: "timerSound" } },
+					{ name: "Presets", desc: "Two quick-start buttons next to Start.", control: { type: "toggle", key: "timerPresets" } },
+					{
+						name: "Preset 1",
+						control: { type: "dropdown", key: "preset1", options: options(PRESET_MINUTES, presetLabel) },
+					},
+					{
+						name: "Preset 2",
+						control: { type: "dropdown", key: "preset2", options: options(PRESET_MINUTES, presetLabel) },
 					},
 				],
 			},
 			{
 				type: "list",
 				heading: "Calendar feeds",
-				emptyState:
-					"No feeds yet. Add a read-only .ics URL (e.g. Google Calendar's secret address). URLs are stored in this vault's plugin data.",
+				emptyState: "No feeds yet.",
 				items: feeds.map((feed, i) => ({
 					name: feedName(feed, i),
 					aliases: ["calendar", "ics"],
@@ -131,16 +204,17 @@ export class DailyGlanceSettingTab extends PluginSettingTab {
 	getControlValue(key: string): unknown {
 		const s = this.plugin.settings;
 		if (key.startsWith("show.")) return s.show[key.slice(5) as ItemId];
-		if (key === "weekStart") return String(s.weekStart); // dropdown values are strings
+		if (NUMERIC_KEYS.includes(key)) return String((s as unknown as Record<string, number>)[key]);
 		return (s as unknown as Record<string, unknown>)[key];
 	}
 
 	async setControlValue(key: string, value: unknown): Promise<void> {
 		const s = this.plugin.settings;
 		if (key.startsWith("show.")) s.show[key.slice(5) as ItemId] = value === true;
-		else if (key === "weekStart") s.weekStart = Number(value);
+		else if (NUMERIC_KEYS.includes(key)) (s as unknown as Record<string, number>)[key] = Number(value);
 		else (s as unknown as Record<string, unknown>)[key] = value;
 		if (key === "tempUnit") this.plugin.weather.clear(); // refetch in the new unit
+		if (key === "language") setLanguage(s.language);
 		await this.plugin.saveSettings();
 		if (key === "colorEvents") this.rerender(); // show/hide the per-feed colour pickers
 	}
@@ -161,10 +235,17 @@ export class DailyGlanceSettingTab extends PluginSettingTab {
 			if (def.type === "page") return; // not used
 			if (def.heading) new Setting(el).setName(def.heading).setHeading();
 			const list = def.type === "list" ? (def as SettingDefinitionList) : null;
+			const count = def.items?.length ?? 0;
 			def.items?.forEach((item, i) => {
 				const row = this.renderFallback(el, item);
-				if (row && list?.onDelete) {
-					const onDelete = list.onDelete;
+				const { onDelete, onReorder } = list ?? {};
+				// No drag handles before 1.13: move rows with up/down buttons instead.
+				if (row && onReorder) {
+					if (i > 0) row.addExtraButton((b) => b.setIcon("arrow-up").setTooltip("Move up").onClick(() => onReorder(i, i - 1)));
+					if (i < count - 1)
+						row.addExtraButton((b) => b.setIcon("arrow-down").setTooltip("Move down").onClick(() => onReorder(i, i + 1)));
+				}
+				if (row && onDelete) {
 					row.addExtraButton((b) => b.setIcon("trash-2").setTooltip("Remove").onClick(() => onDelete(i)));
 				}
 			});
@@ -288,13 +369,22 @@ export class DailyGlanceSettingTab extends PluginSettingTab {
 		);
 	}
 
+	private async moveItem(from: number, to: number): Promise<void> {
+		const { order } = this.plugin.settings;
+		const [id] = order.splice(from, 1);
+		if (id) order.splice(to, 0, id);
+		await this.plugin.saveSettings();
+		this.rerender();
+	}
+
 	private async saveFeeds(): Promise<void> {
 		await this.plugin.saveSettings();
 		await this.plugin.calendar.refresh(true);
 	}
 
 	private async addFeed(): Promise<void> {
-		const { feeds } = this.plugin.settings;
+		const { feeds, order } = this.plugin.settings;
+		const title = (id: ItemId) => ITEMS.find((i) => i.id === id)?.title ?? id;
 		if (feeds.length >= MAX_FEEDS) return;
 		feeds.push({ name: "", url: "" });
 		await this.plugin.saveSettings();

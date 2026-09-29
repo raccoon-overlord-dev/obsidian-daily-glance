@@ -2,6 +2,7 @@ import ICAL from "ical.js";
 import { requestUrl, setIcon, setTooltip } from "obsidian";
 import { moment } from "./moment";
 import type DailyGlancePlugin from "./main";
+import { localeData, m, t } from "./i18n";
 import { Panel, renderEmpty, renderStatus, setLoading } from "./panel";
 
 export interface Feed {
@@ -12,8 +13,6 @@ export interface Feed {
 
 export const MAX_FEEDS = 5;
 const REFRESH_MS = 15 * 60_000;
-const UPCOMING_COUNT = 5;
-const UPCOMING_DAYS = 14;
 // ponytail: occurrences are walked from DTSTART; cap guards against runaway rules.
 // If old daily series get slow, start the iterator near the range instead.
 const MAX_OCCURRENCES = 20_000;
@@ -32,7 +31,7 @@ interface FeedState {
 	error: string | null;
 }
 
-export const feedName = (feed: Feed, i: number) => feed.name.trim() || `Feed ${i + 1}`;
+export const feedName = (feed: Feed, i: number) => feed.name.trim() || t("feedN", { n: i + 1 });
 
 // All-day dates are calendar dates: build them in local time so they never shift by timezone.
 function toDate(t: ICAL.Time): Date {
@@ -104,12 +103,12 @@ export class Calendar {
 				} catch (e) {
 					// Never include the URL: it's a secret.
 					const status = (e as { status?: number }).status;
-					return this.feeds.set(feed.url, { events: prev?.events ?? null, error: status ? `HTTP ${status}` : "network error" });
+					return this.feeds.set(feed.url, { events: prev?.events ?? null, error: status ? `HTTP ${status}` : t("networkError") });
 				}
 				try {
 					this.feeds.set(feed.url, { events: parse(text), error: null });
 				} catch {
-					this.feeds.set(feed.url, { events: prev?.events ?? null, error: "not a valid calendar" });
+					this.feeds.set(feed.url, { events: prev?.events ?? null, error: t("invalidCalendar") });
 				}
 			})
 		);
@@ -142,7 +141,7 @@ export class Calendar {
 				const s = toDate(start);
 				let e = toDate(end);
 				if (e <= s) e = start.isDate ? new Date(s.getFullYear(), s.getMonth(), s.getDate() + 1) : s;
-				if (e > from && s < to) out.push({ title: title || "(No title)", start: s, end: e, allDay: start.isDate, feed, color });
+				if (e > from && s < to) out.push({ title: title || t("noTitle"), start: s, end: e, allDay: start.isDate, feed, color });
 			};
 			for (const ev of this.feeds.get(f.url)?.events ?? []) {
 				if (!ev.isRecurring()) {
@@ -182,18 +181,18 @@ function renderEvents(parent: HTMLElement, plugin: DailyGlancePlugin, events: Ca
 		return;
 	}
 	const time = settings.timeFormat === "12h" ? "h:mm A" : "HH:mm";
-	const today = moment().startOf("day");
+	const today = m().startOf("day");
 	for (const ev of events) {
 		// An event already under way is listed under today.
-		const day = moment.max(moment(ev.start).startOf("day"), today);
+		const day = moment.max(m(ev.start).startOf("day"), today);
 		const diff = day.diff(today, "days");
 		const row = list.createDiv({
 			cls: "daily-glance-cal-event",
-			attr: { title: moment(ev.start).format(settings.dateFormat) },
+			attr: { title: m(ev.start).format(settings.dateFormat) },
 		});
 		const when = row.createDiv({ cls: "daily-glance-cal-event-when" });
-		when.createEl("b", { text: diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : day.format("ddd D") });
-		when.appendText(ev.allDay ? "All day" : `${moment(ev.start).format(time)}–${moment(ev.end).format(time)}`);
+		when.createEl("b", { text: diff === 0 ? t("today") : diff === 1 ? t("tomorrow") : day.format("ddd D") });
+		when.appendText(ev.allDay ? t("allDay") : `${m(ev.start).format(time)}–${m(ev.end).format(time)}`);
 		const what = row.createDiv();
 		paint(what.createDiv({ cls: "daily-glance-cal-event-title", text: ev.title }), ev);
 		what.createDiv({ cls: "daily-glance-cal-event-feed", text: ev.feed });
@@ -234,7 +233,7 @@ const eventsOn = (events: CalEvent[], day: moment.Moment) => {
 
 // A focusable, clickable day (div, not <button>, so Obsidian's button styling stays off the grid).
 function dayCell(parent: HTMLElement, cls: string, day: moment.Moment, redraw: () => void): HTMLElement {
-	const isToday = day.isSame(moment(), "day");
+	const isToday = day.isSame(m(), "day");
 	const isSelected = !!nav.selected?.isSame(day, "day");
 	const el = parent.createDiv({
 		cls: [cls, ...(isToday ? ["is-today"] : []), ...(isSelected ? ["is-selected"] : [])],
@@ -262,16 +261,16 @@ export function renderCalendar(panel: Panel, plugin: DailyGlancePlugin): void {
 	panel.el.removeClass("is-loading");
 
 	if (!settings.feeds.some((f) => f.url.trim())) {
-		renderEmpty(panel.body, "calendar", "Add a calendar feed in Settings → Daily Glance.");
+		renderEmpty(panel.body, "calendar", t("addFeed"));
 		return;
 	}
-	iconButton(panel.actions, "refresh-cw", "Refresh calendars", () => void calendar.refresh(true));
+	iconButton(panel.actions, "refresh-cw", t("refreshCalendars"), () => void calendar.refresh(true));
 	if (calendar.pending()) {
 		setLoading(panel, true);
 		return;
 	}
 	for (const { feed, error } of calendar.errors()) {
-		renderStatus(panel.body, "error", `“${feed}” feed failed to load (${error}).`);
+		renderStatus(panel.body, "error", t("feedFailed", { feed, error }));
 	}
 
 	const layout = settings.calendarLayout;
@@ -283,7 +282,7 @@ export function renderCalendar(panel: Panel, plugin: DailyGlancePlugin): void {
 		const isMonth = layout.startsWith("month");
 		const unit = isMonth ? "month" : "week";
 		const { weekStart } = settings;
-		const cursor = nav.cursor ?? moment();
+		const cursor = m(nav.cursor ?? undefined); // re-localized: the language may have changed
 		const first = isMonth ? weekOf(cursor.clone().startOf("month"), weekStart) : weekOf(cursor, weekStart);
 		const rows = isMonth
 			? Math.ceil((cursor.clone().endOf("month").diff(first, "days") + 1) / 7)
@@ -298,35 +297,35 @@ export function renderCalendar(panel: Panel, plugin: DailyGlancePlugin): void {
 			: `${first.format("D MMM")} – ${last.format("D MMM YYYY")}`;
 		navEl.createSpan({
 			cls: "daily-glance-cal-month-label",
-			text: !isMonth && settings.showWeekNumbers ? `${label} · W${weekNumber(first, weekStart)}` : label,
+			text: !isMonth && settings.showWeekNumbers ? `${label} · ${t("weekShort", { n: weekNumber(first, weekStart) })}` : label,
 		});
 		const move = (n: number) => () => {
 			nav.cursor = cursor.clone().add(n, unit);
 			redraw();
 		};
-		iconButton(navEl, "chevron-left", `Previous ${unit}`, move(-1));
+		iconButton(navEl, "chevron-left", t(isMonth ? "prevMonth" : "prevWeek"), move(-1));
 		navEl
-			.createEl("button", { cls: ["clickable-icon", "daily-glance-cal-today"], text: "Today" })
+			.createEl("button", { cls: ["clickable-icon", "daily-glance-cal-today"], text: t("today") })
 			.addEventListener("click", () => {
 				nav.cursor = nav.selected = null;
 				redraw();
 			});
-		iconButton(navEl, "chevron-right", `Next ${unit}`, move(1));
+		iconButton(navEl, "chevron-right", t(isMonth ? "nextMonth" : "nextWeek"), move(1));
 
 		if (isMonth) {
 			const grid = wrap.createDiv({ cls: "daily-glance-cal-grid", attr: { role: "grid" } });
 			grid.toggleClass("has-week-numbers", settings.showWeekNumbers);
 			if (settings.showWeekNumbers) grid.createDiv({ cls: "daily-glance-cal-weekday" });
 			for (let i = 0; i < 7; i++) {
-				grid.createDiv({ cls: "daily-glance-cal-weekday", text: moment.weekdaysMin((weekStart + i) % 7) });
+				grid.createDiv({ cls: "daily-glance-cal-weekday", text: localeData().weekdaysShort()[(weekStart + i) % 7] });
 			}
 			for (let r = 0; r < rows; r++) {
 				const rowStart = first.clone().add(r * 7, "days");
 				if (settings.showWeekNumbers) {
 					grid.createDiv({
 						cls: "daily-glance-cal-weeknum",
-						text: `W${weekNumber(rowStart, weekStart)}`,
-						attr: { "aria-label": `Week ${weekNumber(rowStart, weekStart)}` },
+						text: t("weekShort", { n: weekNumber(rowStart, weekStart) }),
+						attr: { "aria-label": t("week", { n: weekNumber(rowStart, weekStart) }) },
 					});
 				}
 				for (let c = 0; c < 7; c++) {
@@ -346,7 +345,7 @@ export function renderCalendar(panel: Panel, plugin: DailyGlancePlugin): void {
 			for (let c = 0; c < 7; c++) {
 				const day = first.clone().add(c, "days");
 				const cell = dayCell(week, "daily-glance-cal-week-day", day, redraw);
-				cell.createDiv({ cls: "daily-glance-cal-weekday", text: day.format("dd D") });
+				cell.createDiv({ cls: "daily-glance-cal-weekday", text: day.format("ddd D") });
 				const dayEvents = eventsOn(events, day);
 				for (const ev of dayEvents.slice(0, 3)) {
 					paint(cell.createDiv({ cls: "daily-glance-cal-event-title", text: ev.title, attr: { title: ev.title } }), ev);
@@ -360,12 +359,12 @@ export function renderCalendar(panel: Panel, plugin: DailyGlancePlugin): void {
 	if (nav.selected && layout !== "events") {
 		const from = nav.selected.toDate();
 		const events = calendar.occurrences(from, nav.selected.clone().add(1, "day").toDate());
-		renderEvents(cal, plugin, events, nav.selected.format("dddd D MMMM"), "No events.");
+		renderEvents(cal, plugin, events, m(nav.selected).format("dddd D MMMM"), t("noEvents"));
 	} else if (showUpcoming) {
 		const events = calendar
-			.occurrences(new Date(), moment().add(UPCOMING_DAYS, "days").toDate())
-			.slice(0, UPCOMING_COUNT);
-		renderEvents(cal, plugin, events, "Upcoming", `No events in the next ${UPCOMING_DAYS} days.`);
+			.occurrences(new Date(), m().add(settings.upcomingDays, "days").toDate())
+			.slice(0, settings.upcomingCount);
+		renderEvents(cal, plugin, events, t("upcoming"), t("noUpcoming", { days: settings.upcomingDays }));
 	}
 	cal.toggleClass("has-events", layout !== "events" && !!cal.querySelector(".daily-glance-cal-events"));
 }

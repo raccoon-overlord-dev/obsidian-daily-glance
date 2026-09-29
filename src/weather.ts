@@ -1,5 +1,5 @@
 import { requestUrl, setIcon, setTooltip } from "obsidian";
-import { moment } from "./moment";
+import { m, StringKey, t } from "./i18n";
 import type DailyGlancePlugin from "./main";
 import { Panel, renderEmpty, renderStatus, setLoading } from "./panel";
 
@@ -25,38 +25,41 @@ interface WeatherData {
 	days: Day[]; // [0] = today
 }
 
-// WMO weather interpretation codes → Lucide icon + label (Open-Meteo docs).
-const WMO: Record<number, [string, string]> = {
-	0: ["sun", "Clear sky"],
-	1: ["cloud-sun", "Mainly clear"],
-	2: ["cloud-sun", "Partly cloudy"],
-	3: ["cloud", "Overcast"],
-	45: ["cloud-fog", "Fog"],
-	48: ["cloud-fog", "Rime fog"],
-	51: ["cloud-drizzle", "Light drizzle"],
-	53: ["cloud-drizzle", "Drizzle"],
-	55: ["cloud-drizzle", "Heavy drizzle"],
-	56: ["cloud-drizzle", "Freezing drizzle"],
-	57: ["cloud-drizzle", "Freezing drizzle"],
-	61: ["cloud-rain", "Light rain"],
-	63: ["cloud-rain", "Rain"],
-	65: ["cloud-rain", "Heavy rain"],
-	66: ["cloud-rain", "Freezing rain"],
-	67: ["cloud-rain", "Freezing rain"],
-	71: ["cloud-snow", "Light snow"],
-	73: ["cloud-snow", "Snow"],
-	75: ["cloud-snow", "Heavy snow"],
-	77: ["cloud-snow", "Snow grains"],
-	80: ["cloud-rain", "Light showers"],
-	81: ["cloud-rain", "Showers"],
-	82: ["cloud-rain", "Heavy showers"],
-	85: ["cloud-snow", "Snow showers"],
-	86: ["cloud-snow", "Heavy snow showers"],
-	95: ["cloud-lightning", "Thunderstorm"],
-	96: ["cloud-lightning", "Thunderstorm with hail"],
-	99: ["cloud-lightning", "Thunderstorm with hail"],
+// WMO weather interpretation codes → Lucide icon + label key (Open-Meteo docs).
+const WMO: Record<number, [string, StringKey]> = {
+	0: ["sun", "clearSky"],
+	1: ["cloud-sun", "mainlyClear"],
+	2: ["cloud-sun", "partlyCloudy"],
+	3: ["cloud", "overcast"],
+	45: ["cloud-fog", "fog"],
+	48: ["cloud-fog", "rimeFog"],
+	51: ["cloud-drizzle", "lightDrizzle"],
+	53: ["cloud-drizzle", "drizzle"],
+	55: ["cloud-drizzle", "heavyDrizzle"],
+	56: ["cloud-drizzle", "freezingDrizzle"],
+	57: ["cloud-drizzle", "freezingDrizzle"],
+	61: ["cloud-rain", "lightRain"],
+	63: ["cloud-rain", "rain"],
+	65: ["cloud-rain", "heavyRain"],
+	66: ["cloud-rain", "freezingRain"],
+	67: ["cloud-rain", "freezingRain"],
+	71: ["cloud-snow", "lightSnow"],
+	73: ["cloud-snow", "snow"],
+	75: ["cloud-snow", "heavySnow"],
+	77: ["cloud-snow", "snowGrains"],
+	80: ["cloud-rain", "lightShowers"],
+	81: ["cloud-rain", "showers"],
+	82: ["cloud-rain", "heavyShowers"],
+	85: ["cloud-snow", "snowShowers"],
+	86: ["cloud-snow", "heavySnowShowers"],
+	95: ["cloud-lightning", "thunderstorm"],
+	96: ["cloud-lightning", "thunderstormHail"],
+	99: ["cloud-lightning", "thunderstormHail"],
 };
-const wmo = (code: number) => WMO[code] ?? ["cloud", "Unknown"];
+const wmo = (code: number): [string, string] => {
+	const [icon, key] = WMO[code] ?? ["cloud", "unknown"];
+	return [icon, t(key)];
+};
 
 const REFRESH_MS = 30 * 60_000;
 const RETRY_MS = 5 * 60_000;
@@ -158,22 +161,22 @@ export function renderWeather(panel: Panel, plugin: DailyGlancePlugin): void {
 	panel.el.removeClass("is-loading", "is-stale");
 
 	if (!settings.city.trim()) {
-		renderEmpty(panel.body, "map-pin", "Set a city in Settings → Daily Glance.");
+		renderEmpty(panel.body, "map-pin", t("setCity"));
 		return;
 	}
 	if (!settings.location) {
-		renderStatus(panel.body, "error", `Couldn't find “${settings.city}”. Check the city in Settings → Daily Glance.`);
+		renderStatus(panel.body, "error", t("cityNotFound", { city: settings.city }));
 		return;
 	}
 
-	const refresh = panel.actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Refresh" } });
+	const refresh = panel.actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": t("refresh") } });
 	setIcon(refresh, "refresh-cw");
-	setTooltip(refresh, "Refresh");
+	setTooltip(refresh, t("refresh"));
 	refresh.addEventListener("click", () => void weather.refresh(true));
 
 	const data = weather.data;
 	if (!data) {
-		if (weather.error) renderStatus(panel.body, "error", `Weather failed to load from Open-Meteo (${weather.error}).`);
+		if (weather.error) renderStatus(panel.body, "error", t("weatherFailed", { error: weather.error }));
 		else setLoading(panel, true);
 		return;
 	}
@@ -185,14 +188,14 @@ export function renderWeather(panel: Panel, plugin: DailyGlancePlugin): void {
 	now.createSpan({ cls: "daily-glance-weather-temp", text: deg(data.temp) });
 	const meta = now.createSpan({ cls: "daily-glance-weather-meta" });
 	meta.createSpan({ cls: "daily-glance-weather-cond", text: label });
-	if (today) meta.createSpan({ cls: "daily-glance-weather-range", text: `H ${deg(today.max)} · L ${deg(today.min)}` });
+	if (today) meta.createSpan({ cls: "daily-glance-weather-range", text: t("highLow", { hi: deg(today.max), lo: deg(today.min) }) });
 	meta.createSpan({ cls: "daily-glance-weather-place", text: settings.location.name });
 
 	if (weather.error) {
 		panel.el.addClass("is-stale");
-		renderStatus(panel.body, "stale", `Updated ${moment(weather.fetchedAt).fromNow()} · update failed`).setAttr(
+		renderStatus(panel.body, "stale", t("stale", { when: m(weather.fetchedAt).fromNow() })).setAttr(
 			"title",
-			"Last update failed"
+			t("lastUpdateFailed")
 		);
 	}
 
@@ -201,7 +204,7 @@ export function renderWeather(panel: Panel, plugin: DailyGlancePlugin): void {
 		for (const day of rest.slice(0, 5)) {
 			const [dayIcon, dayLabel] = wmo(day.code);
 			const el = forecast.createDiv({ cls: "daily-glance-weather-day", attr: { title: dayLabel } });
-			el.createSpan({ text: moment(day.date, "YYYY-MM-DD").format("ddd") });
+			el.createSpan({ text: m(day.date, "YYYY-MM-DD").format("ddd") });
 			setIcon(el.createSpan({ attr: { "aria-label": dayLabel } }), dayIcon);
 			el.createSpan({ cls: "daily-glance-weather-day-hi", text: deg(day.max) });
 			el.createSpan({ cls: "daily-glance-weather-day-lo", text: deg(day.min) });

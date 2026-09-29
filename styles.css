@@ -236,3 +236,6 @@
 .daily-glance-skeleton:nth-child(2) { width: 80%; }
 /* Day cells are focusable divs, not native buttons, so give them a visible focus ring. */
 .daily-glance-cal-day:focus-visible, .daily-glance-cal-week-day:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--dg-focus); }
+/* Panel titles can be hidden (setting): drop the header when it has nothing left to show. */
+.daily-glance-panel-actions { margin-left: auto; }
+.daily-glance-panel-header:not(:has(.daily-glance-panel-title)):has(.daily-glance-panel-actions:empty) { display: none; }

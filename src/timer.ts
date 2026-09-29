@@ -1,5 +1,7 @@
 import { setIcon } from "obsidian";
 import type { Panel } from "./panel";
+import type { DailyGlanceSettings } from "./settings";
+import { t } from "./i18n";
 
 type Status = "idle" | "running" | "paused" | "done";
 
@@ -46,6 +48,31 @@ export class Timer {
 	}
 }
 
+// Minutes → "15 min", "1 h", "1 h 30".
+export function presetLabel(min: number): string {
+	const h = Math.floor(min / 60);
+	const rest = min % 60;
+	if (!h) return `${min} min`;
+	return rest ? `${h} h ${rest}` : `${h} h`;
+}
+
+// Three short beeps, synthesized with Web Audio, so there's no sound file to ship.
+export function beep(): void {
+	const ctx = new AudioContext();
+	for (let i = 0; i < 3; i++) {
+		const at = ctx.currentTime + i * 0.3;
+		const osc = ctx.createOscillator();
+		const gain = ctx.createGain();
+		osc.frequency.value = 880;
+		gain.gain.setValueAtTime(0.2, at);
+		gain.gain.exponentialRampToValueAtTime(0.001, at + 0.2);
+		osc.connect(gain).connect(ctx.destination);
+		osc.start(at);
+		osc.stop(at + 0.2);
+	}
+	window.setTimeout(() => void ctx.close(), 1500);
+}
+
 function format(ms: number): string {
 	const total = Math.ceil(ms / 1000);
 	const h = Math.floor(total / 3600);
@@ -63,7 +90,7 @@ function button(parent: HTMLElement, icon: string, text: string, cta: boolean, o
 }
 
 // Returns a tick function; the view calls it every second.
-export function renderTimer(panel: Panel, timer: Timer): () => void {
+export function renderTimer(panel: Panel, timer: Timer, settings: DailyGlanceSettings): () => void {
 	let drawn: Status;
 	let display: HTMLElement | null = null;
 	let bar: HTMLElement | null = null;
@@ -95,26 +122,31 @@ export function renderTimer(panel: Panel, timer: Timer): () => void {
 				input.inputMode = "numeric";
 				return input;
 			};
-			const h = field("h", Math.floor(total / 3600));
+			const h = field(t("hours"), Math.floor(total / 3600));
 			inputs.createSpan({ cls: "daily-glance-timer-sep", text: ":" });
-			const m = field("m", Math.floor((total % 3600) / 60));
+			const m = field(t("minutes"), Math.floor((total % 3600) / 60));
 			inputs.createSpan({ cls: "daily-glance-timer-sep", text: ":" });
-			const s = field("s", total % 60);
+			const s = field(t("seconds"), total % 60);
 			const controls = root.createDiv({ cls: "daily-glance-timer-controls" });
-			button(controls, "play", "Start", true, () => {
+			button(controls, "play", t("start"), true, () => {
 				const n = (el: HTMLInputElement) => Math.max(0, parseInt(el.value, 10) || 0);
 				const ms = ((n(h) * 60 + n(m)) * 60 + n(s)) * 1000;
 				if (ms === 0) return;
 				timer.start(ms);
 				draw();
 			});
+			if (settings.timerPresets) {
+				for (const min of [settings.preset1, settings.preset2]) {
+					button(controls, "timer", presetLabel(min), false, () => (timer.start(min * 60_000), draw()));
+				}
+			}
 			return;
 		}
 
 		if (drawn === "done") {
 			const label = root.createDiv({ cls: "daily-glance-timer-done-label", attr: { role: "status" } });
 			setIcon(label.createSpan(), "bell");
-			label.appendText("Time's up");
+			label.appendText(t("timesUp"));
 		}
 		display = root.createDiv({ cls: "daily-glance-timer-display" });
 		progress = root.createDiv({
@@ -123,9 +155,9 @@ export function renderTimer(panel: Panel, timer: Timer): () => void {
 		});
 		bar = progress.createDiv();
 		const controls = root.createDiv({ cls: "daily-glance-timer-controls" });
-		if (drawn === "running") button(controls, "pause", "Pause", false, () => (timer.pause(), draw()));
-		if (drawn === "paused") button(controls, "play", "Resume", true, () => (timer.resume(), draw()));
-		button(controls, "rotate-ccw", "Reset", drawn === "done", () => (timer.reset(), draw()));
+		if (drawn === "running") button(controls, "pause", t("pause"), false, () => (timer.pause(), draw()));
+		if (drawn === "paused") button(controls, "play", t("resume"), true, () => (timer.resume(), draw()));
+		button(controls, "rotate-ccw", t("reset"), drawn === "done", () => (timer.reset(), draw()));
 		update();
 	};
 

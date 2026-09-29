@@ -18,7 +18,9 @@ Your day at a glance in Obsidian: a clock, the weather, your calendars and a cou
 - **Clock**: time and date. 12- or 24-hour time, optional seconds, and any [moment.js date format](https://momentjs.com/docs/#/displaying/format/).
 - **Weather**: current temperature, conditions and today's high/low, plus an optional 5-day forecast, from [Open-Meteo](https://open-meteo.com/) (free, no account, no API key). °C or °F.
 - **Calendar**: read-only view of up to 5 `.ics` feeds (Google Calendar, iCloud, Outlook, Nextcloud, …) merged into one. Handles recurring events (including edited and deleted occurrences), all-day events and timezones. Five layouts, a configurable first day of the week, optional ISO week numbers and optional per-calendar colours.
-- **Timer**: countdown with start, pause/resume and reset. It keeps running while the widget is closed and shows a notice when time is up.
+- **Timer**: countdown with start, pause/resume, reset and two configurable quick-start presets. It keeps running while the widget is closed and shows a notice (and beeps, unless turned off) when time is up.
+- **Languages**: the widget speaks English, Italian, French, German or Spanish, following Obsidian's language by default. Dates, weekdays and weather conditions are translated too.
+- **Your layout**: reorder the items, hide the ones you don't need, and hide the panel titles for a cleaner look.
 - **Theme-native**: the plugin ships no colours of its own. Every colour, font and radius comes from your theme.
 - **Responsive**: a 2×2 grid in a wide pane, one column in a narrow one. Turning items off reflows the rest without leaving gaps.
 - **Independent items**: if the weather service or one calendar feed is down, only that item shows an error; the others keep working.
@@ -40,7 +42,7 @@ Your day at a glance in Obsidian: a clock, the weather, your calendars and a cou
 
 Open the widget with the ribbon icon or the command palette (**Daily Glance: Open**). It opens in the right sidebar. Drag its tab anywhere, like any other view: another sidebar, the main area, or a pop-out window.
 
-Items always appear in the same order: clock, weather, calendar, timer. Turn off the ones you don't need in settings.
+Items appear in the order set in **Settings → Daily Glance → Items** (drag the rows; on Obsidian older than 1.13, use the arrow buttons). Turn off the ones you don't need there too.
 
 ### Clock
 
@@ -83,13 +85,15 @@ Layouts (setting **Layout**):
 
 ### Timer
 
-Enter hours, minutes and seconds, then press **Start**. While it runs you can **Pause**, **Resume** or **Reset**. When time is up the panel shows "Time's up" and Obsidian shows a notice, even if the widget is closed. The timer is not saved when Obsidian quits.
+Enter hours, minutes and seconds, then press **Start**, or press one of the two preset buttons next to it (15 min and 30 min by default) to start right away. While it runs you can **Pause**, **Resume** or **Reset**. When time is up the panel shows "Time's up" and Obsidian shows a notice and plays three short beeps, even if the widget is closed. The beep can be turned off in settings. The timer is not saved when Obsidian quits.
 
 ## Settings reference
 
 | Setting | Default | Notes |
 |---|---|---|
-| Show clock / weather / calendar / timer | On | Hidden items are not rendered and make no network requests. |
+| Language | Same as Obsidian | English, Italiano, Français, Deutsch or Español. Other Obsidian languages fall back to English labels. Settings stay in English. |
+| Show panel titles | On | Off hides the "Clock", "Weather", … labels. |
+| Items: show clock / weather / calendar / timer | On | Hidden items are not rendered and make no network requests. Drag to reorder. |
 | Time format | 24-hour | 12-hour adds AM/PM. |
 | Show seconds | On | Off: the clock changes once a minute. |
 | Date format | `dddd, D MMMM YYYY` | moment.js format, with a live preview. |
@@ -99,8 +103,13 @@ Enter hours, minutes and seconds, then press **Start**. While it runs you can **
 | Layout | Month + events | See the table above. |
 | Week starts on | Monday | Any day. |
 | Show week numbers | Off | ISO week numbers ("W39"). |
+| Upcoming events | 5 | How many events the upcoming list shows: 3, 5, 10, 15 or 20. |
+| Upcoming range | 14 days | How far ahead the list looks: 1 to 60 days. |
 | Colour events by calendar | Off | When on, each feed gets a colour picker. Its event titles are highlighted and its month-view dots use that colour. |
 | Feeds | *(none)* | Up to 5, each with a name, an `.ics` URL and an optional colour. |
+| Timer sound | On | Three short beeps when the timer ends. |
+| Timer presets | On | Shows two quick-start buttons beside **Start**. |
+| Preset 1 / Preset 2 | 15 min / 30 min | From 1 minute to 2 hours. |
 
 ## Network use
 
@@ -132,7 +141,8 @@ TypeScript, bundled with esbuild, following the official [sample plugin](https:/
 | `src/main.ts` | The plugin: registers the view, ribbon icon, command and settings tab. Owns the long-lived state (settings, timer, weather and calendar caches) and the background intervals. |
 | `src/view.ts` | `DailyGlanceView`, the `ItemView`. `render()` builds the grid and one panel per enabled item; `redraw(id)` refills a single panel. |
 | `src/panel.ts` | The panel shell shared by every item (header, actions, body) and helpers for the loading, error, stale and empty states. |
-| `src/settings.ts` | Settings type, defaults, the fixed item order (`ITEMS`) and the settings tab. |
+| `src/settings.ts` | Settings type, defaults, the item list (`ITEMS`, also the default order) and the settings tab. |
+| `src/i18n.ts` | Widget strings per language, `t(key)`, and `m()`: moment in the widget's language (Obsidian's global locale is never changed). |
 | `src/clock.ts`, `src/timer.ts`, `src/weather.ts`, `src/calendar.ts` | One file per item: its data logic and its render function. |
 | `src/moment.ts` | Re-exports Obsidian's `moment` with a callable type (needed with TypeScript 7). |
 | `styles.css` | All styling. |
@@ -174,7 +184,7 @@ Plugin-specific CSS that isn't in the design system goes in the **Plugin additio
 
 An item is one panel in the grid. Adding one, for example a "Quote of the day", takes five steps.
 
-**1. Register it.** In `src/settings.ts`, add its id to `ItemId`, add it to `ITEMS` at the position where it should appear, and give it a default in `DEFAULT_SETTINGS.show`:
+**1. Register it.** In `src/settings.ts`, add its id to `ItemId`, add it to `ITEMS` (new items go to the end of each user's saved order), and give it a default in `DEFAULT_SETTINGS.show`:
 
 ```ts
 export type ItemId = "clock" | "weather" | "calendar" | "timer" | "quote";
@@ -188,7 +198,7 @@ export const ITEMS: { id: ItemId; title: string }[] = [
 show: { clock: true, weather: true, calendar: true, timer: true, quote: true },
 ```
 
-The "Show …" toggle in settings is generated from `ITEMS`, so there's nothing else to add for it.
+The toggle in the **Items** list is generated from `ITEMS`, so there's nothing else to add for it. The panel title is `t(id)`: add a `quote` string to every table in `src/i18n.ts` (TypeScript flags the ones you miss). Put any other text the item shows there too, and format dates with `m()` rather than `moment()`.
 
 **2. Write the render function** in a new `src/quote.ts`. It receives the panel and fills `panel.body` (and `panel.actions` for header buttons). It must be safe to call again on the same panel, so empty the panel first:
 
@@ -232,7 +242,7 @@ refreshData(): void {
 
 Always use `requestUrl`, never `fetch`. Put remote text into the DOM only as text. Document the new domain under [Network use](#network-use).
 
-**5. Style it.** Add rules to the **Plugin additions** block in `styles.css`, using `daily-glance-<item>-*` class names and only `--dg-*` colours. The grid handles placement: items flow in `ITEMS` order, and an odd last item spans the full width.
+**5. Style it.** Add rules to the **Plugin additions** block in `styles.css`, using `daily-glance-<item>-*` class names and only `--dg-*` colours. The grid handles placement: items flow in the user's order, and an odd last item spans the full width.
 
 Add the item's settings to the settings type, the defaults and `DailyGlanceSettingTab.getSettingDefinitions()`. Simple toggles and dropdowns are `control` definitions whose `key` is the settings field name; anything custom is a `render` definition. The same definitions are drawn by Obsidian 1.13+ and by the `display()` fallback on older versions. Call `plugin.saveSettings()` after every change so open views update live.
 

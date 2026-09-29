@@ -7,13 +7,14 @@ export interface Panel {
 }
 
 // Shared shell: section.daily-glance-panel > header + body (design-system/components/Panel).
-export function createPanel(parent: HTMLElement, id: string, title: string): Panel {
+// The visible title is optional (settings.showTitles); the aria-label always names the panel.
+export function createPanel(parent: HTMLElement, id: string, title: string, showTitle: boolean): Panel {
 	const el = parent.createEl("section", {
 		cls: ["daily-glance-panel", `daily-glance-panel--${id}`],
 		attr: { "aria-label": title },
 	});
 	const header = el.createEl("header", { cls: "daily-glance-panel-header" });
-	header.createSpan({ cls: "daily-glance-panel-title", text: title });
+	if (showTitle) header.createSpan({ cls: "daily-glance-panel-title", text: title });
 	const actions = header.createSpan({ cls: "daily-glance-panel-actions" });
 	const body = el.createDiv({ cls: "daily-glance-panel-body" });
 	return { el, actions, body };
