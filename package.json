@@ -1,6 +1,6 @@
 {
   "name": "daily-glance",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Your day at a glance: clock, weather, calendar and timer in one view.",
   "main": "main.js",
   "type": "module",

@@ -62,5 +62,7 @@ export class DailyGlanceView extends ItemView {
 		if (id === "timer") this.ticks.timer = renderTimer(panel, this.plugin.timer, settings);
 		if (id === "weather") renderWeather(panel, this.plugin);
 		if (id === "calendar") renderCalendar(panel, this.plugin);
+		// Titles hidden: drop the header unless the panel put buttons in it.
+		panel.actions.parentElement?.toggle(settings.showTitles || panel.actions.hasChildNodes());
 	}
 }

@@ -383,8 +383,7 @@ export class DailyGlanceSettingTab extends PluginSettingTab {
 	}
 
 	private async addFeed(): Promise<void> {
-		const { feeds, order } = this.plugin.settings;
-		const title = (id: ItemId) => ITEMS.find((i) => i.id === id)?.title ?? id;
+		const { feeds } = this.plugin.settings;
 		if (feeds.length >= MAX_FEEDS) return;
 		feeds.push({ name: "", url: "" });
 		await this.plugin.saveSettings();
